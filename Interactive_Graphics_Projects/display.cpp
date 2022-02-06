@@ -8,13 +8,14 @@
 #include<iostream>
 #include "cyCodeBase/cyGL.h"
 
-//function declarations
+//glut functions
 void display_function();
 void keyboard_function(unsigned char key, int x, int y);
 void mouse_func(int x, int y);
 void mouse_click_func(int button, int state, int x, int y);
 void mouse_passive_func(int x, int y);
 void idle_function();
+void wind_reshape();
 //helper methods
 cy::Matrix4f create_mv(float mid);
 cy::Matrix3f create_norm_mv(float mid);
