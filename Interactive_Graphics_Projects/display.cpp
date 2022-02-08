@@ -11,17 +11,21 @@
 //glut functions
 void display_function();
 void keyboard_function(unsigned char key, int x, int y);
+void keyboard_up_function(unsigned char key, int x, int y);
+void special_k_function(int key, int x, int y);
+void special_k_up_function(int key, int x, int y);
 void mouse_func(int x, int y);
 void mouse_click_func(int button, int state, int x, int y);
 void mouse_passive_func(int x, int y);
 void idle_function();
-void wind_reshape();
+void wind_reshape(int x, int y);
 //helper methods
 cy::Matrix4f create_mv(float mid);
 cy::Matrix3f create_norm_mv(float mid);
 cy::Matrix4f create_mvp(float mid);
 std::vector<cy::Vec3f> build_triangle_buff(cyTriMesh mesh);
 std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh);
+void set_uniforms();
 //bg color
 double red;
 double blue;
@@ -31,33 +35,37 @@ double alpha;
 double pot_r;
 double pot_g;
 double pot_b;
+bool r_down = false;
+bool b_down= false;
+bool g_down = false;
+//pot rotation
+float mid;
+double rotx = -1.5;
+double rotz = 0;
 //camera
 cy::Vec3f cam_dir;
+float dist = 100.0;
 //light
 cy::Vec3f light_pos;
 float light_intensity;
-float light_vert = 100;
 float amb = .4;
-
+float light_hori = 0;
+float light_vert = 0;
+cy::Matrix3f l_mv;
 //material
 float a;
-float ks = 1;
-//rotation
-float mid;
-//Variable declarations
+//program variables
 cy::GLSLProgram prog;
 int buff_size;
 int norm_buff_size;
 int width = 1920;
 int height = 1080;
-double rotx = -1.5;
-double rotz = 0;
-float dist = 100.0;
+
 int mouse_x;
 int mouse_y;
+bool ctrl = false;
 bool rc = false;
 int rc_click;
-double c;
 
 //main
 int main(int argc, char** argv)
@@ -111,26 +119,14 @@ int main(int argc, char** argv)
 	
 	//vs and fs
 	prog.BuildFiles("shader.vert", "shader.frag");
-	//uniform
-	cy::Matrix4f mvp = create_mvp(mid);
-	cy::Matrix3f norm_mv = create_norm_mv(mid);
-	cy::Matrix4f mv = create_mv(mid);
-	light_pos = cy::Vec3f(dist, 0 , light_vert);
+	//uniforms
+	light_pos = cy::Vec3f(0, 0, 1) ;
 	light_intensity = 1;
-	a = 5;
+	a = 10;
 	pot_r = 1;
 	pot_g = 0;
 	pot_b = 0;
-	prog["mvp"] = mvp;
-	prog["mv"] = mv;
-	prog["norm_mv"] = norm_mv;
-	prog["clr"] = cy::Vec3f(pot_r,pot_g,pot_b);
-	prog["l_dir"] = (light_pos-cy::Vec3f(0,0,0)).GetNormalized();
-	prog["v_dir"] = cam_dir;
-	prog["l_inten"] = light_intensity;
-	prog["amb_l"] = cy::Vec3f(amb,amb,amb);
-	prog["alpha"] = a;
-	prog["ks"] = cy::Vec3f(ks, ks, ks);
+	set_uniforms();
 	//vao and vbo
 	glVertexArrayVertexBuffer(vao, 0, triangle_buff, 0, sizeof(cy::Vec3f));
 	glVertexArrayAttribBinding(vao, 0, 0);
@@ -146,10 +142,14 @@ int main(int argc, char** argv)
 	//callback
 	glutDisplayFunc(display_function);
 	glutKeyboardFunc(keyboard_function);
+	glutKeyboardUpFunc(keyboard_up_function);
 	//glutIdleFunc(idle_function);
 	glutMotionFunc(mouse_func);
 	glutMouseFunc(mouse_click_func);
 	//glutPassiveMotionFunc(mouse_passive_func);
+	glutSpecialFunc(special_k_function);
+	glutReshapeFunc(wind_reshape);
+	glutSpecialUpFunc(special_k_up_function);
 
 	//opengl
 	red = 0;
@@ -162,6 +162,7 @@ int main(int argc, char** argv)
 	glutMainLoop();
 	return 0;
 }
+//helper functions
 cy::Matrix4f create_mvp(float mid)
 {
 	cy::Vec3f cam_pos = { 0,0,dist};
@@ -244,6 +245,23 @@ std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh)
 	
 	return norms;
 }
+void set_uniforms()
+{
+	cy::Matrix4f mvp = create_mvp(mid);
+	cy::Matrix3f norm_mv = create_norm_mv(mid);
+	cy::Matrix4f mv = create_mv(mid);
+	prog["mvp"] = mvp;
+	prog["mv"] = mv;
+	prog["norm_mv"] = norm_mv;
+	prog["clr"] = cy::Vec3f(pot_r, pot_g, pot_b);
+	prog["l_dir"] = (light_pos - cy::Vec3f(0, 0, 0)).GetNormalized();
+	prog["v_dir"] = cam_dir;
+	prog["l_inten"] = light_intensity;
+	prog["amb_l"] = cy::Vec3f(amb, amb, amb);
+	prog["alpha"] = a;
+	prog["ks"] = cy::Vec3f(1, 1, 1);
+}
+//glut functions
 void mouse_click_func(int button, int state, int x, int y)
 {
 	if (button == 0)
@@ -268,6 +286,15 @@ void mouse_func(int x, int y)
 	{
 		dist -= (x - mouse_x) / 2;
 	}
+	else if (ctrl)
+	{
+		if (x - mouse_x != 0)
+			light_hori += ((x - mouse_x)) * 3.14 / 720;
+		if (y - mouse_y != 0)
+			light_vert += ((y - mouse_y) * 3.14) / 720;
+		l_mv = cy::Matrix3f::RotationX(light_vert)* cy::Matrix3f::RotationZ(light_hori);
+		light_pos = l_mv*light_pos;
+	}
 	else
 	{
 		if (x - mouse_x != 0)
@@ -275,8 +302,7 @@ void mouse_func(int x, int y)
 		if (y - mouse_y != 0)
 			rotx += ((y - mouse_y) * 3.14) / 180;
 	}
-	cy::Matrix4f mvp = create_mvp(mid);
-	prog["mvp"] = mvp;
+	set_uniforms();
 	mouse_y = y;
 	mouse_x = x;
 	glutPostRedisplay();
@@ -291,29 +317,90 @@ void keyboard_function(unsigned char key, int x, int y)
 	case 27://esc
 		glutLeaveMainLoop();
 		break;
-	case 32://space
-		a = a * 5;
-		if (a > 50000)
-		{
-			a = 5;
-  		}
-		prog["alpha"] = a;
-		break;
-	case 25://f9
-		prog.BuildFiles("shader.vert", "shader.frag");
-		cy::Matrix4f mvp = create_mvp(mid);
-		prog["mvp"] = mvp;
-		break;
 	case 112://p
 		rotx = -1.5;
-       		rotz = 0;
+       	rotz = 0;
 		dist = 100.0;
-		cy::Matrix4f mvp2 = create_mvp(mid);
-		prog["mvp"] = mvp2;
+		set_uniforms();
+		break;
+	case 114://r
+		r_down = true;
+		break;
+	case 103://g
+		g_down = true;
+		break;
+	case 98://b
+		b_down = true;
 		break;
 	}
 	glutPostRedisplay();
 	
+}
+void keyboard_up_function(unsigned char key, int x, int y)
+{
+	switch (key) {
+	case 27://esc
+		glutLeaveMainLoop();
+		break;
+	case 112://p
+		rotx = -1.5;
+		rotz = 0;
+		dist = 100.0;
+		set_uniforms();
+		break;
+	case 114://r
+		r_down = false;
+		break;
+	case 103://g
+		g_down = false;
+		break;
+	case 98://b
+		b_down = false;
+		break;
+	}
+	glutPostRedisplay();
+}
+void special_k_function(int key, int x, int y)
+{
+	switch (key) {
+	case 9://f9
+		prog.BuildFiles("shader.vert", "shader.frag");
+		set_uniforms();
+		break;
+	case 114://ctrl
+		ctrl = true;
+		break;
+	case 101://up arrow
+		if (r_down && pot_r < 1)
+		{
+			pot_r += .05;
+		}
+		else if (g_down && pot_g < 1)
+		{
+			pot_g += .05;
+		}
+		else if (b_down && pot_b < 1)
+		{
+			pot_b += .05;
+		}
+		break;
+	case 103://down arrow
+		if (r_down && pot_r > 0)
+		{
+			pot_r -= .05;
+		}
+		else if (g_down && pot_g > 0)
+		{
+			pot_g -= .05;
+		}
+		else if (b_down && pot_b > 0)
+		{
+			pot_b -= .05;
+		}
+		break;
+	}
+	set_uniforms();
+	glutPostRedisplay();
 }
 void display_function()
 {
@@ -324,5 +411,21 @@ void display_function()
 	glDrawArrays(GL_TRIANGLES, 0, norm_buff_size);
 	glutSwapBuffers();
 }
-
-
+void wind_reshape(int x, int y)
+{
+	width = x;
+	height = y;
+	set_uniforms();
+	glViewport(0, 0, width, height);
+	set_uniforms();
+	glutPostRedisplay();
+}
+void special_k_up_function(int key, int x, int y)
+{
+	switch (key) {
+	case 114://ctrl
+		ctrl = false;
+		break;
+	}
+	glutPostRedisplay();
+}

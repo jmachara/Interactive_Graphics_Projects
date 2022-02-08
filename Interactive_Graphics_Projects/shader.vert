@@ -28,8 +28,8 @@ void main()
 	gl_Position = mvp*vec4(pos,1);
 	vColor = clr;
 	light_dir = (mv*vec4(l_dir,0)).xyz;
-	normal = norm_mv*norm;
-	view_dir = (mv*vec4(v_dir,0)).xyz;
+	normal = normalize(norm_mv*norm);
+	view_dir = v_dir;
 	intensity = l_inten;
 	amb_light = amb_l;
 	k_s = ks;

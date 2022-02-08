@@ -13,25 +13,13 @@ in vec3 k_s;
 
 void main()
 {
-	vec4 amb = vec4(amb_light*vColor,0);
+	vec4 amb = vec4(amb_light*vColor,1);
 	highp float kd_ang = dot(normal,light_dir);
 	vec4 kd = vec4(kd_ang,kd_ang,kd_ang,1);
 	vec4 ks = vec4(k_s,1);
 	vec3 hlf_ang = normalize(light_dir+view_dir);
 	vec4 dif = kd*vec4(vColor,1);
 	vec4 spec = ks*pow(dot(normalize(normal),hlf_ang),a);
-	vec3 c = normal;
-	if(c.x < 0)
-	{
-	   c.x = 0;
-	}
-	if(c.y < 0)
-	{
-	   c.y = 0;
-	}
-	if(c.z < 0)
-	{
-	   c.z = 0;
-	}
-	color = vec4(c,1);
+
+	color = intensity*(dif+spec)+amb;
 }
