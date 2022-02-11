@@ -7,6 +7,7 @@
 #include<fstream>
 #include<iostream>
 #include "cyCodeBase/cyGL.h"
+#include "lodepng/lodepng.h"
 
 //glut functions
 void display_function();
@@ -25,12 +26,17 @@ cy::Matrix3f create_norm_mv(float mid);
 cy::Matrix4f create_mvp(float mid);
 std::vector<cy::Vec3f> build_triangle_buff(cyTriMesh mesh);
 std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh);
+std::vector<cy::Vec2f> build_texture_buff(cyTriMesh mesh);
+void set_textures(int i);
 void set_uniforms();
 //bg color
 double red;
 double blue;
 double green;
 double alpha;
+//texture
+cyTriMesh mesh = cyTriMesh();
+
 //pot color
 double pot_r;
 double pot_g;
@@ -97,7 +103,6 @@ int main(int argc, char** argv)
 	glBindVertexArray(vao);
 	
 	//vbo
-	cyTriMesh mesh = cyTriMesh();
 	mesh.LoadFromFileObj(argv[1]);
 	mesh.ComputeBoundingBox();
 	while (!mesh.IsBoundBoxReady()) {}
@@ -116,13 +121,25 @@ int main(int argc, char** argv)
 	std::vector<cy::Vec3f> n_buff = build_norm_buff(mesh);
 	glBindBuffer(GL_ARRAY_BUFFER, norm_buff);
 	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(cy::Vec3f) * mesh.NF(), &n_buff.front(), GL_STATIC_DRAW);
-	
+	//texture buffer
+	GLuint tex_buff;
+	glGenBuffers(1, &tex_buff);
+	std::vector<cy::Vec2f> t_buff = build_texture_buff(mesh);
+	glBindBuffer(GL_ARRAY_BUFFER, tex_buff);
+	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(cy::Vec2f) * mesh.NF(), &t_buff.front(), GL_STATIC_DRAW);
 	//vs and fs
 	prog.BuildFiles("shader.vert", "shader.frag");
+	//texture
+	for (int i = 0; i < mesh.NM(); i++)
+	{
+		set_textures(i);
+	}
+	
+
 	//uniforms
-	light_pos = cy::Vec3f(0, 0, 1) ;
+	light_pos = cy::Vec3f(0, mid, 0) ;
 	light_intensity = 1;
-	a = 10;
+	a = 20;
 	pot_r = 1;
 	pot_g = 0;
 	pot_b = 0;
@@ -138,6 +155,11 @@ int main(int argc, char** argv)
 	glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(cy::Vec3f));
 	glVertexArrayBindingDivisor(vao, 1, 0);
 	glEnableVertexArrayAttrib(vao, 1);
+	glVertexArrayVertexBuffer(vao, 2, tex_buff, 0, sizeof(cy::Vec2f));
+	glVertexArrayAttribBinding(vao, 2, 2);
+	glVertexArrayAttribFormat(vao, 2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(cy::Vec2f));
+	glVertexArrayBindingDivisor(vao, 2, 0);
+	glEnableVertexArrayAttrib(vao, 2);
 
 	//callback
 	glutDisplayFunc(display_function);
@@ -245,6 +267,40 @@ std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh)
 	
 	return norms;
 }
+std::vector<cy::Vec2f> build_texture_buff(cyTriMesh mesh)
+{
+	int faces = mesh.NF();
+	std::vector<cy::Vec2f> coords;
+	norm_buff_size = 3 * faces;
+	for (int i = 0; i < faces; i++)
+	{
+		cy::TriMesh::TriFace face = mesh.FT(i);
+		cy::Vec3f texture1 = mesh.VT(face.v[0]);
+		cy::Vec3f texture2 = mesh.VT(face.v[1]);
+		cy::Vec3f texture3 = mesh.VT(face.v[2]);
+		coords.push_back(texture1.XY());
+		coords.push_back(texture2.XY());
+		coords.push_back(texture3.XY());
+	}
+
+	return coords;
+}
+void set_textures(int i)
+{
+	cyGLTexture2D tex,tex2;
+	tex.Initialize();
+	std::vector<unsigned char> image, image2;
+	unsigned tex_w, tex_h,ks_tex_w,ks_tex_h;
+	cy::TriMesh::Mtl material = mesh.M(i);
+	lodepng::decode(image, tex_w, tex_h, material.map_Kd.data);
+	tex.SetImage(&image.front(), 4, tex_w, tex_h, 0);
+	tex.BuildMipmaps();
+	tex.Bind(i);
+	lodepng::decode(image2, ks_tex_w, ks_tex_h, material.map_Ks.data);
+	tex2.SetImage(&image2.front(), 4, ks_tex_w, ks_tex_h, 0);
+	tex2.BuildMipmaps();
+	tex2.Bind(i+1);
+}
 void set_uniforms()
 {
 	cy::Matrix4f mvp = create_mvp(mid);
@@ -259,7 +315,9 @@ void set_uniforms()
 	prog["l_inten"] = light_intensity;
 	prog["amb_l"] = cy::Vec3f(amb, amb, amb);
 	prog["alpha"] = a;
-	prog["ks"] = cy::Vec3f(1, 1, 1);
+	prog["l_mv"] = cy::Matrix4f::Translation({ 0,0,-mid })*cy::Matrix3f::RotationX(light_vert) * cy::Matrix3f::RotationY(light_hori)* cy::Matrix4f::Translation({ 0,0,mid });
+	prog["tex"] = 0;	
+	prog["tex2"] = 1;
 }
 //glut functions
 void mouse_click_func(int button, int state, int x, int y)
@@ -289,11 +347,10 @@ void mouse_func(int x, int y)
 	else if (ctrl)
 	{
 		if (x - mouse_x != 0)
-			light_hori += ((x - mouse_x)) * 3.14 / 720;
+			light_hori -= ((x - mouse_x)) * 3.14 / 180;
 		if (y - mouse_y != 0)
-			light_vert += ((y - mouse_y) * 3.14) / 720;
-		l_mv = cy::Matrix3f::RotationX(light_vert)* cy::Matrix3f::RotationZ(light_hori);
-		light_pos = l_mv*light_pos;
+			light_vert += ((y - mouse_y) * 3.14) / 180;
+
 	}
 	else
 	{
