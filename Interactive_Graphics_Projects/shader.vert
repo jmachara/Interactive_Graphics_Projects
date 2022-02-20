@@ -15,7 +15,6 @@ out vec2 texCoord;
 uniform mat4 mvp;
 uniform mat4 mv;
 uniform mat3 norm_mv;
-uniform vec3 clr;
 uniform vec3 ks;
 uniform vec3 l_dir;
 uniform vec3 v_dir;

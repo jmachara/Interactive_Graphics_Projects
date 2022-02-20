@@ -32,6 +32,9 @@
     <None Include="simple.vert">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="simple.frag">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cyCodeBase\cyAlphaDistribution.h">

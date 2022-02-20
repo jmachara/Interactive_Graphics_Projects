@@ -24,6 +24,5 @@ void main()
 	vec3 hlf_ang = normalize(light_dir+view_dir);
 	vec4 dif = kd*vec4(clr.xyz,1);
 	vec4 spec = ks*pow(dot(normalize(normal),hlf_ang),a);
-
 	color = intensity*(dif+spec)+amb;
 }
