@@ -35,6 +35,12 @@
     <None Include="simple.frag">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="env.frag">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="env.vert">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cyCodeBase\cyAlphaDistribution.h">

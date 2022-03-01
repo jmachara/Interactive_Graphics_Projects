@@ -21,16 +21,21 @@ void mouse_passive_func(int x, int y);
 void idle_function();
 void wind_reshape(int x, int y);
 //helper methods
-cy::Matrix4f create_mv(float mid);
-cy::Matrix3f create_norm_mv(float mid);
-cy::Matrix4f create_mvp(float mid,double rot_x,double rot_z,float distance);
+cy::Matrix4f create_mv(float mid, float _up);
+cy::Matrix3f create_norm_mv(float mid, float _up);
+cy::Matrix4f create_mvp(float mid,double rot_x,double rot_z,float distance, float _up);
+cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_z, float distance, float _up);
 std::vector<cy::Vec3f> build_triangle_buff(cyTriMesh mesh);
+std::vector<cy::Vec3f> build_cube_triangle_buff(cyTriMesh mesh);
 std::vector<cy::Vec3f> build_square_triangle_buff();
-std::vector<cy::Vec2f> build_square_text_buff();
+std::vector<cy::Vec3f> build_plain_triangle_buff();
 std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh);
 std::vector<cy::Vec2f> build_texture_buff(cyTriMesh mesh);
 void render_texture();
+void make_cube_map();
+void render_object();
 void render_image();
+void render_cube();
 void set_textures();
 void set_uniforms();
 void set_vao();
@@ -41,6 +46,7 @@ double green;
 double alpha;
 //texture
 cyTriMesh mesh = cyTriMesh();
+cyTriMesh cube = cyTriMesh();
 float anis = 1;
 //vao
 GLuint vao;
@@ -48,6 +54,8 @@ GLuint vao;
 float mid;
 double rotx = -1.5;
 double rotz = -2.5;
+double erotx = 0;
+double erotz = 0;
 //plain rotation
 double p_rotx = 0;
 double p_rotz = 0;
@@ -61,7 +69,7 @@ float fov = .7;
 //light
 cy::Vec3f light_pos;
 float light_intensity;
-float amb = .5;
+float amb = .7;
 float light_hori = 0;
 float light_vert = 0;
 cy::Matrix3f l_mv;
@@ -70,8 +78,9 @@ float a;
 cyGLTexture2D tex, tex2;
 cy::GLRenderTexture2D render_buff;
 //program variables
-cy::GLSLProgram prog, prog2;
+cy::GLSLProgram prog, prog2, prog3;
 int buff_size;
+int cube_buff_size;
 int square_buff;
 int norm_buff_size;
 int width = 1920;
@@ -83,6 +92,8 @@ bool ctrl = false;
 bool alt = false;
 bool rc = false;
 int rc_click;
+//environment
+cy::GLTextureCubeMap envMap;
 
 //main
 int main(int argc, char** argv)
@@ -97,7 +108,7 @@ int main(int argc, char** argv)
 	glutInitWindowSize(width, height);
 	glutInitWindowPosition(0, 0);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-	glutCreateWindow("Jack's GlUT");
+	glutCreateWindow("Jack's GLUT");
 
 	//glew
 	GLenum err = glewInit();
@@ -110,11 +121,14 @@ int main(int argc, char** argv)
 
 	prog.BuildFiles("shader.vert", "shader.frag");
 	prog2.BuildFiles("simple.vert", "simple.frag");
+	prog3.BuildFiles("env.vert", "env.frag");
 	//vao
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 
 	mesh.LoadFromFileObj(argv[1]);
+	cube.LoadFromFileObj("cube.obj");
+
 
 	mesh.ComputeBoundingBox();
 	while (!mesh.IsBoundBoxReady()) {}
@@ -126,10 +140,11 @@ int main(int argc, char** argv)
 
 	//texture
 	set_textures();
+
 	//uniforms
 	light_pos = cy::Vec3f(0, mid, 0) ;
 	light_intensity = 1;
-	a = 20;
+	a = 10;
 	set_uniforms();
 	//vao and vbo
 	set_vao();
@@ -157,12 +172,12 @@ int main(int argc, char** argv)
 	return 0;
 }
 //helper functions
-cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance )
+cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance, float _up)
 {
 	cy::Vec3f cam_pos = { 0,0,distance};
 	cy::Vec3f target = { 0,0,0 };
 	cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,1,0 };
+	cy::Vec3f up = { 0,_up,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f view = cy::Matrix4f::View(cam_pos, target, cam_u);
@@ -175,12 +190,25 @@ cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance )
 
 	return proj*view*rot;
 }
-cy::Matrix4f create_mv(float mid)
+cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_y, float distance,float _up)
+{
+	cy::Vec3f cam_pos = { 0,0,distance };
+	cy::Vec3f target = { 0,0,0 };
+	cy::Vec3f cam_u = { 0,_up,0 };
+	cy::Matrix4f view = cy::Matrix4f(cy::Matrix3f(cy::Matrix4f::View(cam_pos, target, cam_u)));
+	cy::Matrix3f xRot = cy::Matrix3f::RotationX(rot_x);
+	cy::Matrix3f zRot = cy::Matrix3f::RotationY(rot_y);
+	cy::Matrix3f rot = xRot * zRot;
+	cy::Matrix4f proj = cy::Matrix4f::Perspective(fov, float(width) / float(height), .1f, 1000.0f);
+
+	return proj * view * rot;
+}
+cy::Matrix4f create_mv(float mid, float _up)
 {
 	cy::Vec3f cam_pos = { 0,0,pot_dist };
 	cy::Vec3f target = { 0,0,0 };
 	cy::Vec3f cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,1,0 };
+	cy::Vec3f up = { 0,_up,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f trans = cy::Matrix4f::Translation({ 0,0,-mid });
@@ -193,12 +221,12 @@ cy::Matrix4f create_mv(float mid)
 	return mv;
 
 }
-cy::Matrix3f create_norm_mv(float mid)
+cy::Matrix3f create_norm_mv(float mid,float _up)
 {
 	cy::Vec3f cam_pos = { 0,0,pot_dist };
 	cy::Vec3f target = { 0,0,0 };
 	cy::Vec3f cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,1,0 };
+	cy::Vec3f up = { 0,_up,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f trans = cy::Matrix4f::Translation({ 0,0,-mid });
@@ -224,6 +252,20 @@ std::vector<cy::Vec3f> build_triangle_buff(cyTriMesh mesh)
 	}
 	return triangles;
 }
+std::vector<cy::Vec3f> build_cube_triangle_buff(cyTriMesh mesh)
+{
+	int tri_points = mesh.NF();
+	std::vector<cy::Vec3f> triangles;
+	cube_buff_size = 3 * tri_points;
+	for (int i = 0; i < tri_points; i++)
+	{
+		cy::TriMesh::TriFace face = mesh.F(i);
+		triangles.push_back(mesh.V(face.v[0]));
+		triangles.push_back(mesh.V(face.v[1]));
+		triangles.push_back(mesh.V(face.v[2]));
+	}
+	return triangles;
+}
 std::vector<cy::Vec3f> build_square_triangle_buff()
 {
 	std::vector<cy::Vec3f> triangles;
@@ -237,6 +279,21 @@ std::vector<cy::Vec3f> build_square_triangle_buff()
 	triangles.push_back(cy::Vec3f(i+inc, j, 0));
 	triangles.push_back(cy::Vec3f(i, j+inc, 0));
 	triangles.push_back(cy::Vec3f(i+inc, j+inc, 0));
+	return triangles;
+}
+std::vector<cy::Vec3f> build_plain_triangle_buff()
+{
+	std::vector<cy::Vec3f> triangles;
+	double inc = 20;
+	double i = -10;
+	double j = -10;
+	square_buff = (6);
+	triangles.push_back(cy::Vec3f(i, 0, j));
+	triangles.push_back(cy::Vec3f(i + inc, 0, j));
+	triangles.push_back(cy::Vec3f(i, 0, j+inc));
+	triangles.push_back(cy::Vec3f(i + inc, 0, j));
+	triangles.push_back(cy::Vec3f(i, 0, j+inc));
+	triangles.push_back(cy::Vec3f(i + inc, 0, j + inc));
 	return triangles;
 }
 std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh)
@@ -284,8 +341,15 @@ void render_texture()
 	glDrawArrays(GL_TRIANGLES, 0, buff_size);
 	render_buff.Unbind();
 	render_buff.BuildTextureMipmaps();
-	render_buff.SetTextureAnisotropy(21);
+	render_buff.SetTextureAnisotropy(4);
 	render_buff.SetTextureFilteringMode(GL_LINEAR_MIPMAP_LINEAR,GL_LINEAR_MIPMAP_LINEAR);
+}
+void render_object()
+{
+	prog.Bind();
+	tex.Bind(0);
+	tex2.Bind(1);
+	glDrawArrays(GL_TRIANGLES, 0, buff_size);
 }
 void render_image() 
 {
@@ -293,10 +357,40 @@ void render_image()
 	render_buff.BindTexture(2);
 	tex.Bind(0);
 	tex2.Bind(1);
-	glClearColor(0, 0, 0, alpha);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	//glDrawArrays(GL_TRIANGLES, 0, buff_size);
 	glDrawArrays(GL_TRIANGLES, 0, square_buff);
+}
+void render_cube()
+{
+	prog3.Bind();
+	envMap.Bind(3);
+	glDrawArrays(GL_TRIANGLES, 0, cube_buff_size);
+
+}
+void make_cube_map()
+{
+	envMap.Initialize();
+	std::vector<unsigned char> image;
+	unsigned tex_w, tex_h;
+	lodepng::decode(image, tex_w, tex_h, "cubemap_posx.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 0, &image.front(), tex_w, tex_h);
+	image.clear();
+	lodepng::decode(image, tex_w, tex_h, "cubemap_negx.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 1, &image.front(), tex_w, tex_h);
+	image.clear();
+	lodepng::decode(image, tex_w, tex_h, "cubemap_posy.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 2, &image.front(), tex_w, tex_h);
+	image.clear();
+	lodepng::decode(image, tex_w, tex_h, "cubemap_negy.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 3, &image.front(), tex_w, tex_h);
+	image.clear();
+	lodepng::decode(image, tex_w, tex_h, "cubemap_posz.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 4, &image.front(), tex_w, tex_h);
+	image.clear();
+	lodepng::decode(image, tex_w, tex_h, "cubemap_negz.png");
+	envMap.SetImageRGBA((cy::GLTextureCubeMap::Side) 5, &image.front(), tex_w, tex_h);
+	envMap.BuildMipmaps();
+	envMap.SetSeamless();
+	
 }
 void set_textures()
 {
@@ -311,12 +405,13 @@ void set_textures()
 	lodepng::decode(image2, ks_tex_w, ks_tex_h, material.map_Ks.data);
 	tex2.SetImage(&image2.front(), 4, ks_tex_w, ks_tex_h, 0);
 	tex2.BuildMipmaps();
+	make_cube_map();
 }
 void set_uniforms()
 {
-	cy::Matrix4f mvp = create_mvp(mid,rotx,rotz,pot_dist);
-	cy::Matrix3f norm_mv = create_norm_mv(mid);
-	cy::Matrix4f mv = create_mv(mid);
+	cy::Matrix4f mvp = create_mvp(mid,rotx,rotz,pot_dist,1);
+	cy::Matrix3f norm_mv = create_norm_mv(mid,1);
+	cy::Matrix4f mv = create_mv(mid,1);
 	prog["mvp"] = mvp;
 	prog["mv"] = mv;
 	prog["norm_mv"] = norm_mv;
@@ -328,10 +423,15 @@ void set_uniforms()
 	prog["l_mv"] = cy::Matrix4f::Translation({ 0,0,-mid })*cy::Matrix3f::RotationX(light_vert) * cy::Matrix3f::RotationY(light_hori)* cy::Matrix4f::Translation({ 0,0,mid });
 	prog["tex"] = 0;	
 	prog["tex2"] = 1;
+	prog["samplerCube"] = 3;
+
 	//simple
-	cy::Matrix4f mvp_s = create_mvp(0,p_rotx,p_rotz,dist);
+	cy::Matrix4f mvp_s = create_mvp(0,p_rotx,p_rotz,dist,1);
 	prog2["mvp_s"] = mvp_s;
 	prog2["tex3"] = 2;
+	//env
+	prog3["samplerCube"] = 3;
+	prog3["vp"] = create_cube_mvp(0, erotx, erotz, 1, 1);
 }
 //glut functions
 void mouse_click_func(int button, int state, int x, int y)
@@ -388,9 +488,15 @@ void mouse_func(int x, int y)
 	else
 	{
 		if (x - mouse_x != 0)
+		{		
 			rotz += ((x - mouse_x)) * 3.14 / 180;
+			erotz += ((x - mouse_x)) * 3.14 / 180;
+		}
 		if (y - mouse_y != 0)
+		{
 			rotx += ((y - mouse_y) * 3.14) / 180;
+			erotx += ((y - mouse_y) * 3.14) / 180;
+		}
 	}
 	set_uniforms();
 	mouse_y = y;
@@ -410,6 +516,8 @@ void keyboard_function(unsigned char key, int x, int y)
 	case 112://p
 		rotx = -1.5;
        	rotz = -2.5;
+		erotx = -1.5;
+		erotz = -2.5;
 		dist = 100.0;
 		pot_dist = 50;
 		set_uniforms();
@@ -441,9 +549,14 @@ void special_k_function(int key, int x, int y)
 }
 void display_function()
 {
+	glClearColor(red, green, blue, alpha);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+	render_cube();
 	glEnable(GL_DEPTH_TEST);
-	render_texture();
-	render_image();
+	render_object();
+	//render_texture();
+	//render_image();
 	glutSwapBuffers();
 }
 void wind_reshape(int x, int y)
@@ -494,7 +607,18 @@ void set_vao()
 	std::vector<cy::Vec3f> s_buff = build_square_triangle_buff();
 	glBindBuffer(GL_ARRAY_BUFFER, plain_buff);
 	glBufferData(GL_ARRAY_BUFFER, square_buff * sizeof(cy::Vec3f), &s_buff.front(), GL_STATIC_DRAW);
-
+	//cube buffer 4 
+	GLuint cube_buff;
+	glGenBuffers(1, &cube_buff);
+	std::vector<cy::Vec3f> c_buff = build_cube_triangle_buff(cube);
+	glBindBuffer(GL_ARRAY_BUFFER, cube_buff);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cy::Vec3f) * cube.NF() * 3, &c_buff.front(), GL_STATIC_DRAW);
+	//plain buffer 5
+	GLuint plain_buff2;
+	glGenBuffers(1, &plain_buff2);
+	std::vector<cy::Vec3f> p_buff = build_square_triangle_buff();
+	glBindBuffer(GL_ARRAY_BUFFER, plain_buff2);
+	glBufferData(GL_ARRAY_BUFFER, square_buff * sizeof(cy::Vec3f), &p_buff.front(), GL_STATIC_DRAW);
 
 	glVertexArrayVertexBuffer(vao, 0, triangle_buff, 0, sizeof(cy::Vec3f));
 	glVertexArrayAttribBinding(vao, 0, 0);
@@ -520,7 +644,15 @@ void set_vao()
 	glVertexArrayBindingDivisor(vao, 3, 0);
 	glEnableVertexArrayAttrib(vao, 3);
 
+	glVertexArrayVertexBuffer(vao, 4, cube_buff, 0, sizeof(cy::Vec3f));
+	glVertexArrayAttribBinding(vao, 4, 4);
+	glVertexArrayAttribFormat(vao, 4, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayBindingDivisor(vao, 4, 0);
+	glEnableVertexArrayAttrib(vao, 4);
 
-
-
+	glVertexArrayVertexBuffer(vao, 5, plain_buff2, 0, sizeof(cy::Vec3f));
+	glVertexArrayAttribBinding(vao, 5, 5);
+	glVertexArrayAttribFormat(vao, 5, 3, GL_FLOAT, GL_FALSE, 0);
+	glVertexArrayBindingDivisor(vao, 5, 0);
+	glEnableVertexArrayAttrib(vao, 5);
 }

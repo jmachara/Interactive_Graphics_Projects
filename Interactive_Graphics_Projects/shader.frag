@@ -4,6 +4,7 @@ layout(location=0) out vec4 color;
 
 uniform sampler2D tex;
 uniform sampler2D tex2;
+uniform samplerCube env;
 in vec2 texCoord;
 
 in vec3 light_dir;
@@ -16,11 +17,13 @@ in highp float a;
 
 void main()
 {
-	vec4 clr = texture(tex,texCoord);
+	vec4 clr = texture(env,reflect(-view_dir,normal));
+	//vec4 clr = vec4(.2,.8,.4,1);
 	vec4 amb = vec4(amb_light*clr.xyz,1);
 	highp float kd_ang = dot(normal,light_dir);
 	vec4 kd = vec4(kd_ang,kd_ang,kd_ang,1);
-	vec4 ks = texture(tex2,texCoord);
+	//vec4 ks = texture(tex2,texCoord);
+	vec4 ks = vec4(0,0,0,1);
 	vec3 hlf_ang = normalize(light_dir+view_dir);
 	vec4 dif = kd*vec4(clr.xyz,1);
 	vec4 spec = ks*pow(dot(normalize(normal),hlf_ang),a);

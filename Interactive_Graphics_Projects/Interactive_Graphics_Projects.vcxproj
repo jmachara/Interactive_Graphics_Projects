@@ -143,6 +143,8 @@
     <ClCompile Include="lodepng\lodepng.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="env.frag" />
+    <None Include="env.vert" />
     <None Include="shader.frag" />
     <None Include="shader.vert" />
     <None Include="simple.frag" />
