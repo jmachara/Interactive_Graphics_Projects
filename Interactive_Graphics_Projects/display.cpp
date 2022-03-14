@@ -21,10 +21,11 @@ void mouse_passive_func(int x, int y);
 void idle_function();
 void wind_reshape(int x, int y);
 //helper methods
-cy::Matrix4f create_mv(float mid, float _up);
-cy::Matrix3f create_norm_mv(float mid, float _up);
-cy::Matrix4f create_mvp(float mid,double rot_x,double rot_z,float distance, float _up);
-cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_z, float distance, float _up);
+cy::Matrix4f create_mv(float mid);
+cy::Matrix3f create_norm_mv(float mid);
+cy::Matrix4f create_mvp(float mid,double rot_x,double rot_z,float distance);
+cy::Matrix4f create_mlp(float mid, double rot_x, double rot_z, float distance);
+cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_z, float distance);
 std::vector<cy::Vec3f> build_triangle_buff(cyTriMesh mesh);
 std::vector<cy::Vec3f> build_cube_triangle_buff(cyTriMesh mesh);
 std::vector<cy::Vec3f> build_square_triangle_buff();
@@ -35,7 +36,9 @@ void render_texture();
 void make_cube_map();
 void render_object();
 void render_image();
+void render_plain();
 void render_cube();
+void render_shadow_map();
 void set_textures();
 void set_uniforms();
 void set_vao();
@@ -47,7 +50,6 @@ double alpha;
 //texture
 cyTriMesh mesh = cyTriMesh();
 cyTriMesh cube = cyTriMesh();
-float anis = 1;
 //vao
 GLuint vao;
 //pot rotation
@@ -57,28 +59,29 @@ double rotz = -2.5;
 double erotx = 0;
 double erotz = 0;
 //plain rotation
-double p_rotx = 0;
-double p_rotz = 0;
+double p_rotx = -1.5;
+double p_rotz = -2.5;
 //camera
 cy::Vec3f cam_dir;
 float dist = 100.0;
-float pot_dist = 50;
 float dist_holder = 100.0;
-float pot_dist_holder = 50;
 float fov = .7;
+float cam_height = 100;
 //light
 cy::Vec3f light_pos;
 float light_intensity;
-float amb = .7;
+float amb = .3;
 float light_hori = 0;
 float light_vert = 0;
 cy::Matrix3f l_mv;
 //material
 float a;
+float bias;
 cyGLTexture2D tex, tex2;
 cy::GLRenderTexture2D render_buff;
+cy::GLRenderDepth2D shadowMap;
 //program variables
-cy::GLSLProgram prog, prog2, prog3;
+cy::GLSLProgram prog, prog2, prog3, prog_shadow;
 int buff_size;
 int cube_buff_size;
 int square_buff;
@@ -91,6 +94,7 @@ int mouse_y;
 bool ctrl = false;
 bool alt = false;
 bool rc = false;
+bool first = true;
 int rc_click;
 //environment
 cy::GLTextureCubeMap envMap;
@@ -122,6 +126,7 @@ int main(int argc, char** argv)
 	prog.BuildFiles("shader.vert", "shader.frag");
 	prog2.BuildFiles("simple.vert", "simple.frag");
 	prog3.BuildFiles("env.vert", "env.frag");
+	prog_shadow.BuildFiles("shadow.vert", "shadow.frag");
 	//vao
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
@@ -142,13 +147,12 @@ int main(int argc, char** argv)
 	set_textures();
 
 	//uniforms
-	light_pos = cy::Vec3f(0, mid, 0) ;
+	light_pos = cy::Vec3f(cos(light_hori) * dist, cam_height, sin(light_hori) * dist);
 	light_intensity = 1;
-	a = 10;
-	set_uniforms();
+	a = 50;
+	bias = .00003;
 	//vao and vbo
 	set_vao();
-
 	//callback
 	glutDisplayFunc(display_function);
 	glutKeyboardFunc(keyboard_function);
@@ -160,24 +164,24 @@ int main(int argc, char** argv)
 	glutSpecialFunc(special_k_function);
 	glutReshapeFunc(wind_reshape);
 	glutSpecialUpFunc(special_k_up_function);
-
+	set_uniforms();
 	//opengl
 	red = 0.3;
 	green = 0.3;
 	blue = 0.3;
 	alpha = 1;
-	glClearColor(1,0,0, alpha);
+	glClearColor(0,0,0, alpha);
 	//call glut
 	glutMainLoop();
 	return 0;
 }
 //helper functions
-cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance, float _up)
+cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance)
 {
 	cy::Vec3f cam_pos = { 0,0,distance};
 	cy::Vec3f target = { 0,0,0 };
 	cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,_up,0 };
+	cy::Vec3f up = { 0,1,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f view = cy::Matrix4f::View(cam_pos, target, cam_u);
@@ -190,11 +194,29 @@ cy::Matrix4f create_mvp(float mid,double rot_x, double rot_z,float distance, flo
 
 	return proj*view*rot;
 }
-cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_y, float distance,float _up)
+cy::Matrix4f create_mlp(float mid, double rot_x, double rot_z, float distance)
+{
+	cy::Vec3f cam_pos = light_pos;
+	cy::Vec3f target = { 0,0,0 };
+	cam_dir = (cam_pos - target).GetNormalized();
+	cy::Vec3f up = { 0,1,0 };
+	cy::Vec3f cam_r = up.Cross(cam_dir);
+	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
+	cy::Matrix4f view = cy::Matrix4f::View(cam_pos, target, cam_u);
+	cy::Matrix4f trans = cy::Matrix4f::Translation({ 0,0,-mid });
+	cy::Matrix4f rtrans = cy::Matrix4f::Translation({ 0,0,mid });
+	cy::Matrix3f xRot = cy::Matrix3f::RotationX(rot_x);
+	cy::Matrix3f zRot = cy::Matrix3f::RotationZ(rot_z);
+	cy::Matrix4f rot = rtrans * xRot * zRot * trans;
+	cy::Matrix4f proj = cy::Matrix4f::Perspective(fov, float(width) / float(height), .1f, 1000.0f);
+
+	return proj * view * rot;
+}
+cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_y, float distance)
 {
 	cy::Vec3f cam_pos = { 0,0,distance };
 	cy::Vec3f target = { 0,0,0 };
-	cy::Vec3f cam_u = { 0,_up,0 };
+	cy::Vec3f cam_u = { 0,1,0 };
 	cy::Matrix4f view = cy::Matrix4f(cy::Matrix3f(cy::Matrix4f::View(cam_pos, target, cam_u)));
 	cy::Matrix3f xRot = cy::Matrix3f::RotationX(rot_x);
 	cy::Matrix3f zRot = cy::Matrix3f::RotationY(rot_y);
@@ -203,12 +225,12 @@ cy::Matrix4f create_cube_mvp(float mid, double rot_x, double rot_y, float distan
 
 	return proj * view * rot;
 }
-cy::Matrix4f create_mv(float mid, float _up)
+cy::Matrix4f create_mv(float mid)
 {
-	cy::Vec3f cam_pos = { 0,0,pot_dist };
+	cy::Vec3f cam_pos = { 0,0,dist};
 	cy::Vec3f target = { 0,0,0 };
 	cy::Vec3f cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,_up,0 };
+	cy::Vec3f up = { 0,1,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f trans = cy::Matrix4f::Translation({ 0,0,-mid });
@@ -221,12 +243,12 @@ cy::Matrix4f create_mv(float mid, float _up)
 	return mv;
 
 }
-cy::Matrix3f create_norm_mv(float mid,float _up)
+cy::Matrix3f create_norm_mv(float mid)
 {
-	cy::Vec3f cam_pos = { 0,0,pot_dist };
+	cy::Vec3f cam_pos = { 0,0,dist };
 	cy::Vec3f target = { 0,0,0 };
 	cy::Vec3f cam_dir = (cam_pos - target).GetNormalized();
-	cy::Vec3f up = { 0,_up,0 };
+	cy::Vec3f up = { 0,1,0 };
 	cy::Vec3f cam_r = up.Cross(cam_dir);
 	cy::Vec3f cam_u = cam_dir.Cross(cam_r);
 	cy::Matrix4f trans = cy::Matrix4f::Translation({ 0,0,-mid });
@@ -284,16 +306,15 @@ std::vector<cy::Vec3f> build_square_triangle_buff()
 std::vector<cy::Vec3f> build_plain_triangle_buff()
 {
 	std::vector<cy::Vec3f> triangles;
-	double inc = 20;
-	double i = -10;
-	double j = -10;
+	double i = -40;
+	double j = -40;
 	square_buff = (6);
-	triangles.push_back(cy::Vec3f(i, 0, j));
-	triangles.push_back(cy::Vec3f(i + inc, 0, j));
-	triangles.push_back(cy::Vec3f(i, 0, j+inc));
-	triangles.push_back(cy::Vec3f(i + inc, 0, j));
-	triangles.push_back(cy::Vec3f(i, 0, j+inc));
-	triangles.push_back(cy::Vec3f(i + inc, 0, j + inc));
+	triangles.push_back(cy::Vec3f(i, j, 0));
+	triangles.push_back(cy::Vec3f(i + 80, j, 0));
+	triangles.push_back(cy::Vec3f(i, j + 80, 0));
+	triangles.push_back(cy::Vec3f(i + 80, j, 0));
+	triangles.push_back(cy::Vec3f(i, j + 80, 0));
+	triangles.push_back(cy::Vec3f(i + 80, j + 80, 0));
 	return triangles;
 }
 std::vector<cy::Vec3f> build_norm_buff(cyTriMesh mesh)
@@ -344,19 +365,35 @@ void render_texture()
 	render_buff.SetTextureAnisotropy(4);
 	render_buff.SetTextureFilteringMode(GL_LINEAR_MIPMAP_LINEAR,GL_LINEAR_MIPMAP_LINEAR);
 }
+void render_shadow_map()
+{
+	prog_shadow.Bind();
+	shadowMap.Initialize(true, width, height);
+	shadowMap.SetTextureFilteringMode(GL_LINEAR, GL_LINEAR);
+	shadowMap.Bind();
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, buff_size);
+	shadowMap.Unbind();
+}
 void render_object()
 {
 	prog.Bind();
-	tex.Bind(0);
-	tex2.Bind(1);
+	shadowMap.BindTexture(2);
+	//tex.Bind(0);
+	//tex2.Bind(1);
 	glDrawArrays(GL_TRIANGLES, 0, buff_size);
 }
 void render_image() 
 {
 	prog2.Bind();
-	render_buff.BindTexture(2);
-	tex.Bind(0);
-	tex2.Bind(1);
+	//render_buff.BindTexture(2);
+	shadowMap.BindTexture(2);
+	glDrawArrays(GL_TRIANGLES, 0, square_buff);
+}
+void render_plain()
+{
+	prog2.Bind();
+	shadowMap.BindTexture(2);
 	glDrawArrays(GL_TRIANGLES, 0, square_buff);
 }
 void render_cube()
@@ -366,6 +403,7 @@ void render_cube()
 	glDrawArrays(GL_TRIANGLES, 0, cube_buff_size);
 
 }
+
 void make_cube_map()
 {
 	envMap.Initialize();
@@ -409,9 +447,11 @@ void set_textures()
 }
 void set_uniforms()
 {
-	cy::Matrix4f mvp = create_mvp(mid,rotx,rotz,pot_dist,1);
-	cy::Matrix3f norm_mv = create_norm_mv(mid,1);
-	cy::Matrix4f mv = create_mv(mid,1);
+	//cy::Matrix4f mvp = create_mvp(mid,rotx,rotz,dist);
+	cy::Matrix4f mvp = create_mvp(mid, rotx, rotz, dist);
+	cy::Matrix3f norm_mv = create_norm_mv(mid);
+	cy::Matrix4f mv = create_mv(mid);
+	light_pos = cy::Vec3f(cos(light_hori)*dist, cam_height, sin(light_hori)*dist);
 	prog["mvp"] = mvp;
 	prog["mv"] = mv;
 	prog["norm_mv"] = norm_mv;
@@ -420,18 +460,42 @@ void set_uniforms()
 	prog["l_inten"] = light_intensity;
 	prog["amb_l"] = cy::Vec3f(amb, amb, amb);
 	prog["alpha"] = a;
-	prog["l_mv"] = cy::Matrix4f::Translation({ 0,0,-mid })*cy::Matrix3f::RotationX(light_vert) * cy::Matrix3f::RotationY(light_hori)* cy::Matrix4f::Translation({ 0,0,mid });
 	prog["tex"] = 0;	
 	prog["tex2"] = 1;
 	prog["samplerCube"] = 3;
+	prog["shadow_matrix"] = cy::Matrix4f::Translation(cy::Vec3f(.5, .5, .5-bias)) * cy::Matrix4f::Scale(.5) * create_mlp(mid, rotx, rotz, dist);
+	prog["shadow"] = 2;
 
 	//simple
-	cy::Matrix4f mvp_s = create_mvp(0,p_rotx,p_rotz,dist,1);
-	prog2["mvp_s"] = mvp_s;
-	prog2["tex3"] = 2;
+	prog2["mvp_s"] = create_mvp(mid, p_rotx, p_rotz, dist);
+	prog2["shadow"] = 2;
+	prog2["shadow_matrix"] = cy::Matrix4f::Translation(cy::Vec3f(.5, .5, .5-bias))* cy::Matrix4f::Scale(.5) * create_mlp(mid, rotx, rotz, dist);
 	//env
 	prog3["samplerCube"] = 3;
-	prog3["vp"] = create_cube_mvp(0, erotx, erotz, 1, 1);
+	prog3["vp"] = create_cube_mvp(0, erotx, erotz, 1);
+	//shadow
+	cy::Matrix4f mlp = create_mlp(mid, rotx, rotz, dist);
+	prog_shadow["mlp"] = mlp;
+
+}
+void display_function()
+{
+	//render_texture();
+	render_shadow_map();
+	glClearColor(0, 0, 0, alpha);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+	//glDisable(GL_DEPTH_TEST);
+	//render_cube();
+	render_plain();
+	render_object();
+	//render_image();
+	glutSwapBuffers();
+	if (first)
+	{
+		first = false;
+		glutPostRedisplay();
+	}
 }
 //glut functions
 void mouse_click_func(int button, int state, int x, int y)
@@ -454,34 +518,25 @@ void mouse_passive_func(int x, int y)
 }
 void mouse_func(int x, int y)
 {
-	if (alt)
+	if (rc)
 	{
-		if (rc)
-		{
-			dist_holder -= (x - mouse_x) / 2;
-			dist = abs(dist_holder);
-			
-		}
-		else
-		{
-			if (x - mouse_x != 0)
-				p_rotz += ((x - mouse_x)) * 3.14 / 180;
-			if (y - mouse_y != 0)
-				p_rotx += ((y - mouse_y) * 3.14) / 180;
+		dist_holder -= (x - mouse_x) / 2;
+		dist = abs(dist_holder);
+	}
+	/*else if (alt)
+	{
+		if (x - mouse_x != 0)
+			p_rotz += ((x - mouse_x)) * 3.14 / 180;
+		if (y - mouse_y != 0)
+			p_rotx += ((y - mouse_y) * 3.14) / 180;
 
-		}
-	}
-	else if (rc)
-	{
-		pot_dist_holder -= (x - mouse_x) / 2;
-		pot_dist = abs(pot_dist_holder);
-	}
+	}*/
 	else if (ctrl)
 	{
 		if (x - mouse_x != 0)
 			light_hori += ((x - mouse_x)) * 3.14 / 180;
 		if (y - mouse_y != 0)
-			light_vert += ((y - mouse_y) * 3.14) / 180;
+			cam_height -= (y - mouse_y);
 
 	}
 	
@@ -491,11 +546,14 @@ void mouse_func(int x, int y)
 		{		
 			rotz += ((x - mouse_x)) * 3.14 / 180;
 			erotz += ((x - mouse_x)) * 3.14 / 180;
+			p_rotz += ((x - mouse_x)) * 3.14 / 180;
 		}
 		if (y - mouse_y != 0)
 		{
 			rotx += ((y - mouse_y) * 3.14) / 180;
 			erotx += ((y - mouse_y) * 3.14) / 180;
+			p_rotx += ((y - mouse_y) * 3.14) / 180;
+
 		}
 	}
 	set_uniforms();
@@ -519,7 +577,6 @@ void keyboard_function(unsigned char key, int x, int y)
 		erotx = -1.5;
 		erotz = -2.5;
 		dist = 100.0;
-		pot_dist = 50;
 		set_uniforms();
 		break;
 	}
@@ -546,18 +603,6 @@ void special_k_function(int key, int x, int y)
 	}
 	set_uniforms();
 	glutPostRedisplay();
-}
-void display_function()
-{
-	glClearColor(red, green, blue, alpha);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glDisable(GL_DEPTH_TEST);
-	render_cube();
-	glEnable(GL_DEPTH_TEST);
-	render_object();
-	//render_texture();
-	//render_image();
-	glutSwapBuffers();
 }
 void wind_reshape(int x, int y)
 {
@@ -616,7 +661,7 @@ void set_vao()
 	//plain buffer 5
 	GLuint plain_buff2;
 	glGenBuffers(1, &plain_buff2);
-	std::vector<cy::Vec3f> p_buff = build_square_triangle_buff();
+	std::vector<cy::Vec3f> p_buff = build_plain_triangle_buff();
 	glBindBuffer(GL_ARRAY_BUFFER, plain_buff2);
 	glBufferData(GL_ARRAY_BUFFER, square_buff * sizeof(cy::Vec3f), &p_buff.front(), GL_STATIC_DRAW);
 

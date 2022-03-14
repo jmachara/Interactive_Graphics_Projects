@@ -147,6 +147,8 @@
     <None Include="env.vert" />
     <None Include="shader.frag" />
     <None Include="shader.vert" />
+    <None Include="shadow.frag" />
+    <None Include="shadow.vert" />
     <None Include="simple.frag" />
     <None Include="simple.vert" />
   </ItemGroup>

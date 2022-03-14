@@ -2,11 +2,12 @@
 
 layout(location=0) out vec4 color;
 
-uniform sampler2D tex3;
+uniform sampler2DShadow shadow;
 
-in vec2 texCoord;
+in vec4 lightView_Position;
 
 void main()
 {
-	color = texture(tex3,texCoord);
+	color = vec4(.3,.3,.2,1);
+	color *= textureProj(shadow,lightView_Position);
 }
