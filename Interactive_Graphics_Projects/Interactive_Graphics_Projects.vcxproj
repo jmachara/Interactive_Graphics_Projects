@@ -146,7 +146,13 @@
     <None Include="env.frag" />
     <None Include="env.vert" />
     <None Include="shader.frag" />
+    <None Include="shader.geom" />
+    <None Include="shader.tsl" />
     <None Include="shader.vert" />
+    <None Include="shader2.geom" />
+    <None Include="shader2.tsl" />
+    <None Include="shader_eval.tsl" />
+    <None Include="shader_eval2.tsl" />
     <None Include="shadow.frag" />
     <None Include="shadow.vert" />
     <None Include="simple.frag" />

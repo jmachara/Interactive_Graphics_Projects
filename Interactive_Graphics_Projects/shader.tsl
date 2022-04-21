@@ -1,0 +1,25 @@
+#version 410 core
+
+layout ( vertices = 4) out; 
+
+in highp float t_level[];
+in int displacement[];
+
+in mat4 mvp[];
+out mat4 mvp_out[];
+out int disp[];
+void main()
+{
+	gl_TessLevelOuter[0] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[1] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[2] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[3] = t_level[gl_InvocationID];
+
+	gl_TessLevelInner[0] = t_level[gl_InvocationID];
+	gl_TessLevelInner[1] = t_level[gl_InvocationID];
+
+	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+
+	mvp_out[gl_InvocationID] = mvp[gl_InvocationID];
+	disp[gl_InvocationID] = displacement[gl_InvocationID];
+}

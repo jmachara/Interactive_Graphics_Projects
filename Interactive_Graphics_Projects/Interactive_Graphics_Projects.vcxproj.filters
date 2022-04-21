@@ -47,6 +47,24 @@
     <None Include="shadow.vert">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="shader.geom">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="shader.tsl">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="shader_eval.tsl">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="shader2.geom">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="shader_eval2.tsl">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="shader2.tsl">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cyCodeBase\cyAlphaDistribution.h">

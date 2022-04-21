@@ -3,33 +3,35 @@
 layout(location=0) out vec4 color;
 
 uniform sampler2D tex;
-uniform sampler2D tex2;
-uniform samplerCube env;
-uniform sampler2DShadow shadow;
 
-in vec2 texCoord;
-in vec4 lightView_Position;
 
-in vec3 light_dir;
-in vec3 normal;
-in vec3 view_dir;
-in highp float intensity;
-in vec3 amb_light;
-in highp float a;
+//uniform samplerCube env;
+//uniform sampler2DShadow shadow;
 
+in vec2 txc;
+//in vec4 lightView_Position;
+in vec3 l_d;
+in mat3 norm;
+in vec3 v_d;
+in highp float i;
+in vec3 a_l;
+in highp float alpha;
+in vec4 clr;
 
 void main()
 {
+	vec3 normal = norm*texture(tex,txc).rgb;
+	//vec4 clr = vec4(.3,.3,.3,1);
+	//color = vec4(1,0,0,1);
 	//vec4 clr = texture(env,reflect(-view_dir,normal));
-	vec4 clr = vec4(1,.9,0,1);
-	clr *= textureProj(shadow,lightView_Position);
-	vec4 amb = vec4(amb_light*clr.xyz,1);
-	highp float kd_ang = dot(normal,light_dir);
+	//clr *= textureProj(shadow,lightView_Position);
+	vec4 amb = vec4(a_l*clr.xyz,1);
+	highp float kd_ang = dot(normal,l_d);
 	vec4 kd = vec4(kd_ang,kd_ang,kd_ang,1);
 	//vec4 ks = texture(tex2,texCoord);
 	vec4 ks = vec4(1,1,1,1);
-	vec3 hlf_ang = normalize(light_dir+view_dir);
+	vec3 hlf_ang = normalize(l_d+v_d);
 	vec4 dif = kd*vec4(clr.xyz,1);
-	vec4 spec = ks*pow(dot(normalize(normal),hlf_ang),a);
-	color = intensity*(dif+spec)+amb;
+	vec4 spec = ks*pow(dot(normalize(normal),hlf_ang),alpha);
+	color = i*(dif+spec)+amb;
 }

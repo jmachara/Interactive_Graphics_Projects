@@ -1,14 +1,19 @@
 #version 330 core
 
-layout(location=5) in vec3 pos;
+layout(location=1) in vec3 pos;
 
 uniform mat4 mvp_s;
-uniform mat4 shadow_matrix;
+uniform highp float t_l;
+uniform int disp;
 
-out vec4 lightView_Position;
+out highp float t_level;
+out mat4 mvp;
+out int displacement;
 
 void main()
 {
-	gl_Position = mvp_s*vec4(pos,1);
-	lightView_Position = shadow_matrix*vec4(pos,1);
+	gl_Position = vec4(pos,1);
+	t_level = t_l;
+	mvp = mvp_s;
+	displacement = disp;
 }

@@ -1,0 +1,37 @@
+#version 410 core
+
+layout ( quads, equal_spacing, ccw ) in; 
+
+uniform sampler2D tex2;
+
+in mat4 mvp_out[];
+in int disp[];
+
+out mat4 mvp_in;
+
+
+vec4 interpolate(vec4 v0, vec4 v1, vec4 v2, vec4 v3 )
+{
+
+	vec4 a = mix( v0, v1, gl_TessCoord.x);
+	vec4 b = mix( v3, v2, gl_TessCoord.x);
+	return mix( a,b,gl_TessCoord.y);
+}
+void main()
+{
+	vec4 position = interpolate(gl_in[0].gl_Position,
+							  gl_in[1].gl_Position,
+							  gl_in[2].gl_Position,
+							  gl_in[3].gl_Position);
+	if(disp[0] == 1)
+	{
+		vec2 txc = vec2((position.x-10)/-20,(position.y-10)/-20);
+		gl_Position = position+vec4(0,0,5*texture(tex2,txc).r,0);
+	}
+	else
+	{
+		gl_Position = position;
+	}
+	
+	mvp_in = mvp_out[0];
+}		

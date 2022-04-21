@@ -1,0 +1,45 @@
+#version 410 core
+
+layout ( vertices = 4) out; 
+
+in highp float t_level[];
+
+in mat4 mvp_out[];
+in vec3 light_dir[];
+in mat3 normal[];
+in vec3 view_dir[];
+in highp float intensity[];
+in vec3 amb_light[];
+in highp float a[];
+in vec4 clr_in[];
+
+out mat4 mvp[];
+out vec3 l_d[];
+out mat3 norm[];
+out vec3 v_d[];
+out highp float i[];
+out vec3 a_l[];
+out highp float alpha[];
+out vec4 clr_out[];
+
+
+void main()
+{
+	gl_TessLevelOuter[0] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[1] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[2] = t_level[gl_InvocationID];
+	gl_TessLevelOuter[3] = t_level[gl_InvocationID];
+
+	gl_TessLevelInner[0] = t_level[gl_InvocationID];
+	gl_TessLevelInner[1] = t_level[gl_InvocationID];
+
+	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+
+	mvp[gl_InvocationID] = mvp_out[gl_InvocationID];
+	l_d[gl_InvocationID] = light_dir[gl_InvocationID];
+	norm[gl_InvocationID] = normal[gl_InvocationID];
+	v_d[gl_InvocationID] = view_dir[gl_InvocationID];
+	i[gl_InvocationID] = intensity[gl_InvocationID];
+	alpha[gl_InvocationID] = a[gl_InvocationID];
+	clr_out[gl_InvocationID] = clr_in[gl_InvocationID];
+}

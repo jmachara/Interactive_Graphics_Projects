@@ -1,0 +1,50 @@
+#version 410 core
+
+layout ( quads, equal_spacing, ccw ) in; 
+
+uniform sampler2D tex2;
+
+in mat4 mvp[];
+in vec3 l_d[];
+in mat3 norm[];
+in vec3 v_d[];
+in highp float i[];
+in vec3 a_l[];
+in highp float alpha[];
+in vec4 clr_out[];
+
+
+out vec3 l_dir;
+out mat3 normal;
+out vec3 v_dir;
+out highp float inten;
+out vec3 a_light;
+out highp float a;
+out vec4 clr_in;
+out mat4 mvp_out;
+
+
+vec4 interpolate(vec4 v0, vec4 v1, vec4 v2, vec4 v3 )
+{
+
+	vec4 a = mix( v0, v1, gl_TessCoord.x);
+	vec4 b = mix( v3, v2, gl_TessCoord.x);
+	return mix( a,b,gl_TessCoord.y);
+}
+void main()
+{
+	vec4 position = interpolate(gl_in[0].gl_Position,
+							  gl_in[1].gl_Position,
+							  gl_in[2].gl_Position,
+							  gl_in[3].gl_Position);
+	vec2 txc = vec2((position.x-10)/-20,(position.y-10)/-20);
+	gl_Position = position+vec4(0,0,5*texture(tex2,txc).r,0);
+	l_dir = l_d[0];
+	normal = norm[0];
+	v_dir = v_d[0];
+	inten = i[0];
+	a_light = a_l[0];
+	a = alpha[0];
+	clr_in = clr_out[0];
+	mvp_out = mvp[0];
+}		
